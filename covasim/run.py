@@ -175,20 +175,6 @@ class MultiSim(cvb.FlexPretty):
         return self
 
 
-    def _has_orig_sim(self):
-        ''' Helper method for determining if an original base sim is present '''
-        return hasattr(self, 'orig_base_sim')
-
-
-    def _rm_orig_sim(self, reset=False):
-        ''' Helper method for removing the original base sim, if present '''
-        if self._has_orig_sim():
-            if reset:
-                self.base_sim = self.orig_base_sim
-            delattr(self, 'orig_base_sim')
-        return
-
-
     def shrink(self, **kwargs):
         '''
         Not to be confused with reduce(), this shrinks each sim in the msim;
@@ -198,7 +184,6 @@ class MultiSim(cvb.FlexPretty):
             kwargs (dict): passed to sim.shrink() for each sim
         '''
         self.base_sim.shrink(**kwargs)
-        self._rm_orig_sim()
         for sim in self.sims:
             sim.shrink(**kwargs)
         return
@@ -206,7 +191,9 @@ class MultiSim(cvb.FlexPretty):
 
     def reset(self):
         ''' Undo a combine() or reduce() by resetting the base sim, which, and results '''
-        self._rm_orig_sim(reset=True)
+        if hasattr(self, 'orig_base_sim'):
+            self.base_sim = self.orig_base_sim
+            delattr(self, 'orig_base_sim')
         self.which = None
         self.results = None
         return
@@ -423,20 +410,18 @@ class MultiSim(cvb.FlexPretty):
             return df
 
 
-    def plot(self, to_plot=None, inds=None, plot_sims=False, color_by_sim=None, max_sims=5, colors=None, labels=None, alpha_range=None, plot_args=None, show_args=None, **kwargs):
+    def plot(self, to_plot=None,dday=None, inds=None, plot_sims=False, color_by_sim=None, max_sims=5, colors=None, labels=None, alpha_range=None, plot_args=None, show_args=None, **kwargs):
         '''
         Plot all the sims  -- arguments passed to Sim.plot(). The
         behavior depends on whether or not combine() or reduce() has been called.
         If so, this function by default plots only the combined/reduced sim (which
         you can override with plot_sims=True). Otherwise, it plots a separate line
         for each sim.
-
         Note that this function is complex because it aims to capture the flexibility
         of both sim.plot() and scens.plot(). By default, if combine() or reduce()
         has been used, it will resemble sim.plot(); otherwise, it will resemble
         scens.plot(). This can be changed via color_by_sim, together with the
         other options.
-
         Args:
             to_plot      (list) : list or dict of which results to plot; see cv.get_default_plots() for structure
             inds         (list) : if not combined or reduced, the indices of the simulations to plot (if None, plot all)
@@ -449,12 +434,9 @@ class MultiSim(cvb.FlexPretty):
             plot_args    (dict) : passed to sim.plot()
             show_args    (dict) : passed to sim.plot()
             kwargs       (dict) : passed to sim.plot()
-
         Returns:
             fig: Figure handle
-
         **Examples**::
-
             sim = cv.Sim()
             msim = cv.MultiSim(sim)
             msim.run()
@@ -465,7 +447,7 @@ class MultiSim(cvb.FlexPretty):
 
         # Plot a single curve, possibly with a range
         if not plot_sims and self.which in ['combined', 'reduced']:
-            fig = self.base_sim.plot(to_plot=to_plot, colors=colors, **kwargs)
+            fig = self.base_sim.plot(to_plot=to_plot, dday=dday,colors=colors, **kwargs)
 
         # PLot individual sims on top of each other
         else:
@@ -839,17 +821,11 @@ class MultiSim(cvb.FlexPretty):
 
     def to_json(self, *args, **kwargs):
         ''' Shortcut for base_sim.to_json() '''
-        if not self.base_sim.results_ready: # pragma: no cover
-            errormsg = 'JSON export only available for reduced sim; please run msim.mean() or msim.median() first'
-            raise RuntimeError(errormsg)
         return self.base_sim.to_json(*args, **kwargs)
 
 
     def to_excel(self, *args, **kwargs):
         ''' Shortcut for base_sim.to_excel() '''
-        if not self.base_sim.results_ready: # pragma: no cover
-            errormsg = 'Excel export only available for reduced sim; please run msim.mean() or msim.median() first'
-            raise RuntimeError(errormsg)
         return self.base_sim.to_excel(*args, **kwargs)
 
 
@@ -1084,7 +1060,7 @@ class Scenarios(cvb.ParsObj):
             return df
 
 
-    def plot(self, *args, **kwargs):
+    def plot(self,dday=None, *args, **kwargs):
         '''
         Plot the results of a scenario. For an explanation of available arguments,
         see Sim.plot().
@@ -1099,7 +1075,7 @@ class Scenarios(cvb.ParsObj):
             scens.run()
             scens.plot()
         '''
-        fig = cvplt.plot_scens(scens=self, *args, **kwargs)
+        fig = cvplt.plot_scens(dday=dday, scens=self, *args, **kwargs)
         return fig
 
 

@@ -253,13 +253,13 @@ def get_default_colors():
     c.infections            = '#b62413'
     c.reinfections          = '#732e26'
     c.infections_by_variant = '#b62413'
-    c.tests                 = '#aaa8ff'
-    c.diagnoses             = '#5f5cd2'
+    c.tests                 = 'navy'
+    c.diagnoses             = 'firebrick'
     c.diagnosed             = c.diagnoses
     c.quarantined           = '#5c399c'
     c.vaccinations          = c.quarantined # TODO: new color
     c.vaccinated            = c.quarantined
-    c.recoveries            = '#9e1149'
+    c.recoveries            = 'green'
     c.recovered             = c.recoveries
     c.symptomatic           = '#c1ad71'
     c.symptomatic_by_variant= c.symptomatic

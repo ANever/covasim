@@ -173,21 +173,32 @@ def create_subplots(figs, fig, shareax, n_rows, n_cols, pnum, fig_args, sep_figs
     return ax
 
 
-def plot_data(sim, ax, key, scatter_args, color=None):
+def plot_data(sim, ax, key, scatter_args, test_data=None, dday=None, color=None):
     ''' Add data to the plot '''
     if sim.data is not None and key in sim.data and len(sim.data[key]):
         if color is None:
             color = sim.results[key].color
         data_t = (sim.data.index-sim['start_day'])/np.timedelta64(1,'D') # Convert from data date to model output index based on model start date
-        ax.scatter(data_t, sim.data[key], c=[color], label='Data', **scatter_args)
+        if dday is not None:
+            if test_data is not None:
+                ax.scatter(data_t[-dday:-test_data], sim.data[key][-dday:-test_data], c=[color], label='Model data', **scatter_args)
+                ax.scatter(data_t[-test_data:], sim.data[key][-test_data:], c='black', label='Test data', **scatter_args)
+            else:
+                ax.scatter(data_t[-dday:], sim.data[key][-dday:], c=[color], label='Data', **scatter_args)
+        else:
+            if test_data is not None:
+                ax.scatter(data_t[:-test_data], sim.data[key][:-test_data], c=[color], label='Model data', **scatter_args)
+                ax.scatter(data_t[-test_data:], sim.data[key][-test_data:], c='black', label='Test data', **scatter_args)
+            else:    
+                ax.scatter(data_t, sim.data[key], c=[color], label='Data', **scatter_args)
     return
 
 
-def plot_interventions(sim, ax):
+def plot_interventions(sim, ax, dday=None):
     ''' Add interventions to the plot '''
     for intervention in sim['interventions']:
         if hasattr(intervention, 'plot_intervention'): # Don't plot e.g. functions
-            intervention.plot_intervention(sim, ax)
+            intervention.plot_intervention(sim, ax, dday=None)
     return
 
 
@@ -367,10 +378,14 @@ def set_line_options(input_args, reskey, resnum, default):
     return output
 
 
-
+import scipy as sp
 #%% Core plotting functions
 
-def plot_sim(to_plot=None, sim=None, do_save=None, fig_path=None, fig_args=None, plot_args=None,
+def smooth(y, sigma=3):
+    return sp.ndimage.gaussian_filter1d(y, sigma=sigma)
+
+
+def plot_sim(to_plot=None, dday=None, test_data=None, sim=None, do_save=None, fig_path=None, fig_args=None, plot_args=None,
          scatter_args=None, axis_args=None, fill_args=None, legend_args=None, date_args=None,
          show_args=None, mpl_args=None, n_cols=None, grid=False, commaticks=True,
          setylim=True, log_scale=False, colors=None, labels=None, do_show=None, sep_figs=False,
@@ -389,36 +404,56 @@ def plot_sim(to_plot=None, sim=None, do_save=None, fig_path=None, fig_args=None,
         ax = create_subplots(figs, fig, ax, n_rows, n_cols, pnum, args.fig, sep_figs, log_scale, title)
         for resnum,reskey in enumerate(keylabels):
             res_t = sim.results['t']
-            if reskey in variant_keys:
-                res = sim.results['variant'][reskey]
-                ns = sim['n_variants']
-                variant_colors = sc.gridcolors(ns)
-                for variant in range(ns):
-                    color = variant_colors[variant]  # Choose the color
-                    label = 'wild type' if variant == 0 else sim['variants'][variant-1].label
+            if dday is not None:
+                if reskey in variant_keys:
+                    res = sim.results['variant'][reskey]
+                    ns = sim['n_variants']
+                    variant_colors = sc.gridcolors(ns)
+                    for variant in range(ns):
+                        color = variant_colors[variant]  # Choose the color
+                        label = 'wild type' if variant == 0 else sim['variants'][variant-1].label
+                        if res.low is not None and res.high is not None:
+                            ax.fill_between(res_t[-dday:], smooth(res.low[variant,:])[-dday:], smooth(res.high[variant,:])[-dday:], color=color, **args.fill)  # Create the uncertainty bound
+                        ax.plot(res_t[-dday:], smooth(res.values[variant,:])[-dday:], label=label, **args.plot, c=color)  # Actually plot the sim!
+                else:
+                    res = sim.results[reskey]
+                    color = set_line_options(colors, reskey, resnum, res.color)  # Choose the color
+                    label = set_line_options(labels, reskey, resnum, res.name)  # Choose the label
                     if res.low is not None and res.high is not None:
-                        ax.fill_between(res_t, res.low[variant,:], res.high[variant,:], color=color, **args.fill)  # Create the uncertainty bound
-                    ax.plot(res_t, res.values[variant,:], label=label, **args.plot, c=color)  # Actually plot the sim!
+                        ax.fill_between(res_t[-dday:], smooth(res.low)[-dday:], smooth(res.high)[-dday:], color=color, **args.fill)  # Create the uncertainty bound
+                    ax.plot(res_t[-dday:], smooth(res.values)[-dday:], label=label, **args.plot, c=color)  # Actually plot the sim!
+                    
             else:
-                res = sim.results[reskey]
-                color = set_line_options(colors, reskey, resnum, res.color)  # Choose the color
-                label = set_line_options(labels, reskey, resnum, res.name)  # Choose the label
-                if res.low is not None and res.high is not None:
-                    ax.fill_between(res_t, res.low, res.high, color=color, **args.fill)  # Create the uncertainty bound
-                ax.plot(res_t, res.values, label=label, **args.plot, c=color)  # Actually plot the sim!
+                if reskey in variant_keys:
+                    res = sim.results['variant'][reskey]
+                    ns = sim['n_variants']
+                    variant_colors = sc.gridcolors(ns)
+                    for variant in range(ns):
+                        color = variant_colors[variant]  # Choose the color
+                        label = 'wild type' if variant == 0 else sim['variants'][variant-1].label
+                        if res.low is not None and res.high is not None:
+                            ax.fill_between(res_t, smooth(res.low[variant,:]), smooth(res.high[variant,:]), color=color, **args.fill)  # Create the uncertainty bound
+                        ax.plot(res_t, smooth(res.values[variant,:]), label=label, **args.plot, c=color)  # Actually plot the sim!
+                else:
+                    res = sim.results[reskey]
+                    color = set_line_options(colors, reskey, resnum, res.color)  # Choose the color
+                    label = set_line_options(labels, reskey, resnum, res.name)  # Choose the label
+                    if res.low is not None and res.high is not None:
+                        ax.fill_between(res_t, smooth(res.low), smooth(res.high), color=color, **args.fill)  # Create the uncertainty bound
+                    ax.plot(res_t, smooth(res.values), label=label, **args.plot, c=color)  # Actually plot the sim!
             if args.show['data']:
-                plot_data(sim, ax, reskey, args.scatter, color=color)  # Plot the data
+                plot_data(sim, ax, reskey,args.scatter, dday=dday, test_data=test_data, color=color)  # Plot the data
             if args.show['ticks']:
                 reset_ticks(ax, sim, args.date) # Optionally reset tick marks (useful for e.g. plotting weeks/months)
         if args.show['interventions']:
-            plot_interventions(sim, ax) # Plot the interventions
+            plot_interventions(sim, ax, dday=dday) # Plot the interventions
         if args.show['legend']:
             title_grid_legend(ax, title, grid, commaticks, setylim, args.legend) # Configure the title, grid, and legend
 
     return tidy_up(fig, figs, sep_figs, do_save, fig_path, do_show, args)
-
-
-def plot_scens(to_plot=None, scens=None, do_save=None, fig_path=None, fig_args=None, plot_args=None,
+    
+    
+def plot_scens(to_plot=None, dday=None, test_data=None, scens=None, do_save=None, fig_path=None, fig_args=None, plot_args=None,
          scatter_args=None, axis_args=None, fill_args=None, legend_args=None, date_args=None,
          show_args=None, mpl_args=None, n_cols=None, grid=False, commaticks=True, setylim=True,
          log_scale=False, colors=None, labels=None, do_show=None, sep_figs=False, fig=None, ax=None, **kwargs):
@@ -439,26 +474,48 @@ def plot_scens(to_plot=None, scens=None, do_save=None, fig_path=None, fig_args=N
             resdata = scens.results[reskey]
             for snum,scenkey,scendata in resdata.enumitems():
                 sim = scens.sims[scenkey][0] # Pull out the first sim in the list for this scenario
-                variant_keys = sim.result_keys('variant')
-                if reskey in variant_keys:
-                    ns = sim['n_variants']
-                    variant_colors = sc.gridcolors(ns)
-                    for variant in range(ns):
-                        res_y = scendata.best[variant,:]
-                        color = variant_colors[variant]  # Choose the color
-                        label = 'wild type' if variant == 0 else sim['variants'][variant - 1].label
-                        ax.fill_between(scens.tvec, scendata.low[variant,:], scendata.high[variant,:], color=color, **args.fill)  # Create the uncertainty bound
-                        ax.plot(scens.tvec, res_y, label=label, c=color, **args.plot)  # Plot the actual line
+                strain_keys = sim.result_keys('strain')
+                if dday is not None:
+                    if reskey in strain_keys:
+                        ns = sim['n_strains']
+                        strain_colors = sc.gridcolors(ns)
+                        for strain in range(ns):
+                            res_y = scendata.best[strain,:]
+                            color = strain_colors[strain]  # Choose the color
+                            label = 'wild type' if strain == 0 else sim['strains'][strain - 1].label
+                            ax.fill_between(scens.tvec[-dday:], smooth(scendata.low[strain,:])[-dday:], smooth(scendata.high[strain,:])[-dday:], color=color, **args.fill)  # Create the uncertainty bound
+                            ax.plot(scens.tvec[-dday:], smooth(res_y)[-dday:], label=label, c=color, **args.plot)  # Plot the actual line
+                            if args.show['data']:
+                                plot_data(sim, ax, reskey, args.scatter,dday=dday, test_data=test_data, color=color)  # Plot the data
+                    else:
+                        res_y = scendata.best
+                        color = set_line_options(colors, scenkey, snum, default_colors[snum])  # Choose the color
+                        label = set_line_options(labels, scenkey, snum, scendata.name)  # Choose the label
+                        ax.fill_between(scens.tvec[-dday:], smooth(scendata.low)[-dday:], smooth(scendata.high)[-dday:], color=color, **args.fill)  # Create the uncertainty bound
+                        ax.plot(scens.tvec[-dday:], smooth(res_y)[-dday:], label=label, c=color, **args.plot)  # Plot the actual line
                         if args.show['data']:
-                            plot_data(sim, ax, reskey, args.scatter, color=color)  # Plot the data
-                else:
-                    res_y = scendata.best
-                    color = set_line_options(colors, scenkey, snum, default_colors[snum])  # Choose the color
-                    label = set_line_options(labels, scenkey, snum, scendata.name)  # Choose the label
-                    ax.fill_between(scens.tvec, scendata.low, scendata.high, color=color, **args.fill)  # Create the uncertainty bound
-                    ax.plot(scens.tvec, res_y, label=label, c=color, **args.plot)  # Plot the actual line
-                    if args.show['data']:
-                        plot_data(sim, ax, reskey, args.scatter, color=color)  # Plot the data
+                            plot_data(sim, ax, reskey, args.scatter, dday=dday, test_data=test_data, color=color)  # Plot the data
+                            
+                else:            
+                    if reskey in strain_keys:
+                        ns = sim['n_strains']
+                        strain_colors = sc.gridcolors(ns)
+                        for strain in range(ns):
+                            res_y = scendata.best[strain,:]
+                            color = strain_colors[strain]  # Choose the color
+                            label = 'wild type' if strain == 0 else sim['strains'][strain - 1].label
+                            ax.fill_between(scens.tvec, smooth(scendata.low[strain,:]), smooth(scendata.high[strain,:]), color=color, **args.fill)  # Create the uncertainty bound
+                            ax.plot(scens.tvec, smooth(res_y), label=label, c=color, **args.plot)  # Plot the actual line
+                            if args.show['data']:
+                                plot_data(sim, ax, reskey,args.scatter, dday=dday, color=color)  # Plot the data
+                    else:
+                        res_y = scendata.best
+                        color = set_line_options(colors, scenkey, snum, default_colors[snum])  # Choose the color
+                        label = set_line_options(labels, scenkey, snum, scendata.name)  # Choose the label
+                        ax.fill_between(scens.tvec, smooth(scendata.low), smooth(scendata.high), color=color, **args.fill)  # Create the uncertainty bound
+                        ax.plot(scens.tvec, smooth(res_y), label=label, c=color, **args.plot)  # Plot the actual line
+                        if args.show['data']:
+                            plot_data(sim, ax, reskey,args.scatter,  dday=dday, color=color)  # Plot the data
 
                 if args.show['interventions']:
                     plot_interventions(sim, ax) # Plot the interventions

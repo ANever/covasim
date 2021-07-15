@@ -77,6 +77,8 @@ class Sim(cvb.BaseSim):
         self.set_metadata(simfile)  # Set the simulation date and filename
         self.update_pars(pars, **kwargs)   # Update the parameters, if provided
         self.load_data(datafile, datacols) # Load the data, if provided
+        if self.load_pop:
+            self.load_population(popfile)  # Load the population, if provided
 
         return
 
@@ -417,12 +419,12 @@ class Sim(cvb.BaseSim):
         # Handle inputs
         if verbose is None:
             verbose = self['verbose']
-        if verbose > 0:
+        if verbose>0:
             resetstr= ''
             if self.people:
                 resetstr = ' (resetting people)' if reset else ' (warning: not resetting sim.people)'
             print(f'Initializing sim{resetstr} with {self["pop_size"]:0n} people for {self["n_days"]} days')
-        if load_pop and self.popdict is None: # If there's a popdict, we initialize it via cvpop.make_people()
+        if load_pop and self.popdict is None:
             self.load_population(popfile=popfile)
 
         # Actually make the people
@@ -565,8 +567,8 @@ class Sim(cvb.BaseSim):
         people   = self.people # Shorten this for later use
         people.update_states_pre(t=t) # Update the state of everyone and count the flows
         contacts = people.update_contacts() # Compute new contacts
-        hosp_max = people.count('severe')   > self['n_beds_hosp'] if self['n_beds_hosp'] is not None else False # Check for acute bed constraint
-        icu_max  = people.count('critical') > self['n_beds_icu']  if self['n_beds_icu']  is not None else False # Check for ICU bed constraint
+        hosp_max = people.count('severe')   > self['n_beds_hosp'] if self['n_beds_hosp'] else False # Check for acute bed constraint
+        icu_max  = people.count('critical') > self['n_beds_icu']  if self['n_beds_icu']  else False # Check for ICU bed constraint
 
         # Randomly infect some people (imported infections)
         if self['n_imports']:
@@ -1227,7 +1229,7 @@ class Sim(cvb.BaseSim):
             return
 
 
-    def plot(self, *args, **kwargs):
+    def plot(self, dday=None, *args, **kwargs):
         '''
         Plot the results of a single simulation.
 
@@ -1281,7 +1283,7 @@ class Sim(cvb.BaseSim):
 
         New in version 2.1.0: argument passing, date_args, and mpl_args
         '''
-        fig = cvplt.plot_sim(sim=self, *args, **kwargs)
+        fig = cvplt.plot_sim(sim=self, dday=dday, *args, **kwargs)
         return fig
 
 
