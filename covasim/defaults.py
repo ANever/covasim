@@ -70,6 +70,8 @@ class PeopleMeta(sc.prettyobj):
             'known_contact',
             'quarantined',
             'vaccinated',
+            'ventilated',
+            'hospitalised',
         ]
 
         # Variant states -- these are ints
@@ -213,6 +215,11 @@ immunity_sources = [
     'mild',
     'severe',
 ]
+
+#Deafault amount of vents and hospital places
+
+vents = 100
+hospital_places = 10000
 
 # Default age data, based on Seattle 2018 census data -- used in population.py
 default_age_data = np.array([
